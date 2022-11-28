@@ -1,9 +1,10 @@
+
+
+
 """
 Contains the :class:`base class <tinydb.middlewares.Middleware>` for
 middlewares and implementations.
 """
-
-
 class Middleware:
     """
     The base class for all Middlewares.

@@ -2,7 +2,8 @@
 This module implements tables, the central place for accessing and manipulating
 data in TinyDB.
 """
-
+import os
+throwerr=False#now db is back in working state
 from typing import (
     Callable,
     Dict,
@@ -16,12 +17,12 @@ from typing import (
     Tuple
 )
 
-from .queries import QueryLike
+from .queries import QueryLike,where
 from .storages import Storage
 from .utils import LRUCache
-
+import json
+import time
 __all__ = ('Document', 'Table')
-
 
 class Document(dict):
     """
@@ -103,7 +104,6 @@ class Table:
         """
         Create a table instance.
         """
-
         self._storage = storage
         self._name = name
         self._query_cache: LRUCache[QueryLike, List[Document]] \
@@ -134,6 +134,70 @@ class Table:
         """
         return self._storage
 
+    def check(self):
+        with open("log.txt", "r") as file:
+            logs=file.read().split("\n")   #reads logs and splits it line by line to form a List
+        
+        for i,log in enumerate(logs):
+            line=log.split('\t')            #split parameters in each log record
+            if(len(line)<=1):
+                continue
+            if(line[-1]=='R'):
+                break
+            if(line[-1]!='D'):
+                line.append("R")        #marking log record as R meaning under recovery  
+                logs[i]="\t".join(line)
+                with open("log.txt", "w") as file:
+                    file.write("\n".join(logs))   #writing the updated log file to disk
+
+                #redo phase
+                if(line[2]=='insert'):
+                    getattr(self,'insert')(json.loads(line[3]))
+                if(line[2]=='remove'):
+                    s=line[3]
+                    s=s[s.find("(")+1:-1]
+                    s=s.split(', ')
+                    key=s[1][s[1].find("(")+1:s[1].find(")")].split(',')[0]
+                    val=s[2]
+                    op=s[0]
+                    if(s[0]=="'<'"):
+                        getattr(self,'remove')(where(key.replace("'",""))<int(val))
+                    if(s[0]=="'>'"):
+                        getattr(self,'remove')(where(key.replace("'",""))>int(val))
+                    if(s[0]=="'=='"):
+                        print("here")
+                        getattr(self,'remove')(where(key.replace("'",""))==int(val))
+                if(line[2]=='update'):
+                    s=line[4]
+                    s=s[s.find("(")+1:-1]
+                    s=s.split(', ')
+                    key=s[1][s[1].find("(")+1:s[1].find(")")].split(',')[0]
+                    val=s[2]
+                    op=s[0]
+                    if(s[0]=="'<'"):
+                        getattr(self,'update')(json.loads(line[3]),where(key.replace("'",""))<int(val))
+                    if(s[0]=="'>'"):
+                        getattr(self,'update')(json.loads(line[3]),where(key.replace("'",""))>int(val))
+                    if(s[0]=="'=='"):
+                        getattr(self,'update')(json.loads(line[3]),where(key.replace("'",""))==int(val))
+                with open("log.txt", "r") as file:
+                    newlog=file.read().split("\n")
+                if(newlog[-1].split('\t')[-1]!="D"):
+                    line=newlog[i].split("\t")[:-1]
+                    newlog[i]='\t'.join(line)
+                    newlog=newlog[:-1]
+                    with open("log.txt", "w") as file:
+                        file.write("\n".join(newlog))
+                    break
+                else:
+                    line.append("D")
+                    logs[i]="\t".join(line)
+                    with open("log.txt", "w") as file:
+                        file.write("\n".join(logs)) 
+            
+
+        
+
     def insert(self, document: Mapping) -> int:
         """
         Insert a new document into the table.
@@ -141,7 +205,11 @@ class Table:
         :param document: the document to insert
         :returns: the inserted document's ID
         """
-
+        file = open("log.txt", "a")
+        file.write("\n"+str(time.time())+"\t"+self.name+"\tinsert\t"+json.dumps(document)) 
+        self.check()
+        if(throwerr):
+            return 'error'
         # Make sure the document implements the ``Mapping`` interface
         if not isinstance(document, Mapping):
             raise ValueError('Document is not a Mapping')
@@ -168,10 +236,10 @@ class Table:
             # ``dict`` instance even if it was a different class that
             # implemented the ``Mapping`` interface
             table[doc_id] = dict(document)
-
         # See below for details on ``Table._update``
         self._update_table(updater)
-
+        file.write("\tD")
+        file.close()
         return doc_id
 
     def insert_multiple(self, documents: Iterable[Mapping]) -> List[int]:
@@ -219,6 +287,9 @@ class Table:
         return doc_ids
 
     def all(self) -> List[Document]:
+        self.check()
+        if(throwerr):
+            return 'error'
         """
         Get all documents stored in the table.
 
@@ -233,6 +304,9 @@ class Table:
         return list(iter(self))
 
     def search(self, cond: QueryLike) -> List[Document]:
+        self.check()
+        if(throwerr):
+            return 'error'
         """
         Search for all documents matching a 'where' cond.
 
@@ -273,7 +347,6 @@ class Table:
         if is_cacheable():
             # Update the query cache
             self._query_cache[cond] = docs[:]
-
         return docs
 
     def get(
@@ -325,6 +398,9 @@ class Table:
         cond: Optional[QueryLike] = None,
         doc_id: Optional[int] = None
     ) -> bool:
+        self.check()
+        if(throwerr):
+            return 'error'
         """
         Check whether the database contains a document matching a query or
         an ID.
@@ -350,6 +426,7 @@ class Table:
         cond: Optional[QueryLike] = None,
         doc_ids: Optional[Iterable[int]] = None,
     ) -> List[int]:
+
         """
         Update all matching documents to have a given set of fields.
 
@@ -361,6 +438,12 @@ class Table:
         """
 
         # Define the function that will perform the update
+        file = open("log.txt", "a")
+        file.write("\n"+str(time.time())+"\t"+self.name+"\tupdate\t"+json.dumps(fields)+"\t"+str(cond)+"\t"+str(doc_ids))
+        self.check()
+        if(throwerr):
+            return 'error'
+        # return None
         if callable(fields):
             def perform_update(table, doc_id):
                 # Update documents by calling the update function provided by
@@ -384,7 +467,8 @@ class Table:
 
             # Perform the update operation (see _update_table for details)
             self._update_table(updater)
-
+            file.write("\tD")
+            file.close()
             return updated_ids
 
         elif cond is not None:
@@ -413,7 +497,8 @@ class Table:
 
             # Perform the update operation (see _update_table for details)
             self._update_table(updater)
-
+            file.write("\tD")
+            file.close()
             return updated_ids
 
         else:
@@ -432,7 +517,8 @@ class Table:
 
             # Perform the update operation (see _update_table for details)
             self._update_table(updater)
-
+            file.write("\tD")
+            file.close()
             return updated_ids
 
     def update_multiple(
@@ -446,7 +532,6 @@ class Table:
 
         :returns: a list containing the updated document's ID
         """
-
         # Define the function that will perform the update
         def perform_update(fields, table, doc_id):
             if callable(fields):
@@ -484,7 +569,7 @@ class Table:
 
         # Perform the update operation (see _update_table for details)
         self._update_table(updater)
-
+        
         return updated_ids
 
     def upsert(self, document: Mapping, cond: Optional[QueryLike] = None) -> List[int]:
@@ -500,7 +585,6 @@ class Table:
         Document with a doc_id
         :returns: a list containing the updated documents' IDs
         """
-
         # Extract doc_id
         if isinstance(document, Document) and hasattr(document, 'doc_id'):
             doc_ids: Optional[List[int]] = [document.doc_id]
@@ -533,6 +617,14 @@ class Table:
         cond: Optional[QueryLike] = None,
         doc_ids: Optional[Iterable[int]] = None,
     ) -> List[int]:
+        
+
+        file = open("log.txt", "a")
+        file.write("\n"+str(time.time())+"\t"+self.name+"\tremove\t"+str(cond) +"\t"+str(doc_ids))
+        self.check()
+        if(throwerr):
+            return 'error'       
+        # raise RuntimeError('Some Error has occured')
         """
         Remove all matching documents.
 
@@ -556,7 +648,8 @@ class Table:
 
             # Perform the remove operation
             self._update_table(updater)
-
+            file.write("\tD")
+            file.close()
             return removed_ids
 
         if cond is not None:
@@ -586,7 +679,8 @@ class Table:
 
             # Perform the remove operation
             self._update_table(updater)
-
+            file.write("\tD")
+            file.close()
             return removed_ids
 
         raise RuntimeError('Use truncate() to remove all documents')
@@ -595,10 +689,12 @@ class Table:
         """
         Truncate the table by removing all documents.
         """
-
+        file = open("log.txt", "a")
+        file.write("\n"+str(time.time())+"\t"+self.name+"\ttruncate")
         # Update the table by resetting all data
         self._update_table(lambda table: table.clear())
-
+        file.write("\tD")
+        file.close()
         # Reset document ID counter
         self._next_id = None
 

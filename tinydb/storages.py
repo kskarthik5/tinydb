@@ -112,7 +112,9 @@ class JSONStorage(Storage):
         # its location
         self._handle.seek(0, os.SEEK_END)
         size = self._handle.tell()
-
+        # file = open("log.txt", "a")
+        # file.write("read ",str(self),"\n")
+        # file.close()
         if not size:
             # File is empty, so we return ``None`` so TinyDB can properly
             # initialize the database

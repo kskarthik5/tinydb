@@ -1,0 +1,9 @@
+1667240055.9559577	our_table	insert	{"name": "Karthik0", "age": 22}	D
+1667240065.6026254	our_table	insert	{"name": "Karthik1", "age": 12}	D
+1667240071.2554836	our_table	insert	{"name": "Karthik4", "age": 42}	D
+1667240089.3851137	our_table	insert	{"name": "Karthik6", "age": 42}	D
+1667240093.5522294	our_table	insert	{"name": "Karthik8", "age": 42}	D
+1667240209.5992744	our_table	insert	{"name": "Karthik10", "age": 42}	R	D
+1667240245.216955	our_table	update	{"age": 5}	QueryImpl('==', ('age',), 42)	None	R	D
+1667240263.223586	our_table	remove	QueryImpl('>', ('age',), 22)	None	R	D
+1667240513.6362896	our_table	insert	{"name": "Karthik12", "age": 42}	D

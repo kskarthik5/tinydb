@@ -89,12 +89,12 @@ class TinyDB(TableBase):
         """
 
         storage = kwargs.pop('storage', self.default_storage_class)
-
         # Prepare the storage
-        self._storage: Storage = storage(*args, **kwargs)
+
 
         self._opened = True
         self._tables: Dict[str, Table] = {}
+        self._storage: Storage = storage(*args, **kwargs)
 
     def __repr__(self):
         args = [
@@ -272,3 +272,5 @@ class TinyDB(TableBase):
         Return an iterator for the default table's documents.
         """
         return iter(self.table(self.default_table_name))
+    
+
